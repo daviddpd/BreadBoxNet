@@ -6,7 +6,7 @@
 `set chassis cluster disable reboot`
 
 ## all
-### EX switches (et al - Ingore Managment link down)
+### EX switches (et al - Ignore Managment link down)
 `set chassis alarm management-ethernet link-down ignore`
 
 ### Clean up system alerts
