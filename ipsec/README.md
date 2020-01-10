@@ -91,7 +91,7 @@ ipsec:
 * Added a YAML config file.  Future versions will likely drop flat text config file.
 * bird is still only filtering 10/8
 * dh group 2 may be required for Raccoon compatibility
-* Lates changes have not been tested with the OpenSource side (FreeBSD, IKE/IPSEC, Raccoon)
+* Latest changes have not been tested with the OpenSource side (FreeBSD, IKE/IPSEC, Raccoon)
 
 ### Juniper SRX IKE Debugging
 * IKEv1 with status No proposal chosen
@@ -105,3 +105,7 @@ Typically this is caused by:
 	* the ips are wrong, previous iteration used the INNER IPs of the tunnels, but this should be the public (outer) IPs.
 * `security ike gateway ike-gate-${NAME} external-interface ${EXT_INT}`
 	* EXT_INT needs to be in security zone
+* character encoding translation issues - especially when copy/pasting over an SSH connection to a serial console.
+  * Tip: `start shell` and use `cat > x.set`, then paste, then Cntrl-D to close file.  back to `cli`, `edit` and then `load set x.set`
+	* When possible, compose in a decent text editor and SCP file to the SRX.
+	* Tip: Configure over the serial console, the system, ssh and a management port, even a non-routed network.  Faster and nicer than 9600 bps. 
