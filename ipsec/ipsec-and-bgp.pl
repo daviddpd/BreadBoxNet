@@ -6,12 +6,13 @@ use warnings;
 use Getopt::Long::Descriptive;
 use Data::Dumper::Simple;
 use NetAddr::IP;
+use YAML;
 
 my ($opt, $usage) = describe_options(
 	'%c %o',
 	[ 'help|h', "help, print usage", ],
 	[ 'verbose|v', "verbose"],
-	[ 'ipfile|f=s', "file with all the ips mappings", { required => 1 } ],	
+	[ 'ipfile|f=s', "file with all the ips mappings, flat text, auto detectes via extentation yaml files - .yml/.yaml", { required => 1 } ],
 	[ 'outdir|o=s', "Output Directory", { required => 1 } ],	
 	
 );
@@ -67,15 +68,20 @@ set protocols bgp group intra-srx family inet unicast add-path receive
 set protocols bgp group intra-srx family inet unicast add-path send path-count 6
 set protocols bgp group intra-srx export send-direct
 set protocols bgp group intra-srx import import-bgp
-set protocols bgp group intra-srx cluster 0.0.0.0  # Advanced BGP licence (SRX-BGP-ADV-LTU) is need for SRX650
+
 set protocols bgp group intra-srx local-as 64645
-set protocols bgp group intra-srx local-as loops 2
+set protocols bgp group intra-srx local-as loops 4
 set protocols bgp group intra-srx multipath
 set protocols bgp group intra-srx hold-time 20
 set protocols bgp group intra-srx bfd-liveness-detection minimum-interval 200
 set protocols bgp group intra-srx bfd-liveness-detection multiplier 6
 
 ";
+
+#set protocols bgp group intra-srx cluster 0.0.0.0
+#edit protocols bgp group intra-srx
+#annotate cluster \"# Route reflector - cluster - requires Advanced BGP licence (SRX-BGP-ADV-LTU) for SRX650 \"
+#top
 
 my $racoonconf = "
 remote anonymous
@@ -117,18 +123,78 @@ sub readFile {
 
 sub parseIpFile {
 	my $filename = shift;
-	my $buffer;
-	my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks) = stat($filename);
-	open FHX, "<$filename";
-	read (FHX,$buffer,$size);
-	close FHX;
+	my @tunnels;
+
+	if ( $filename =~ m/\.(yml|yaml)$/ )
+	{
+		@tunnels = parseIpFile_yaml($filename);
+	} else {
+		@tunnels = parseIpFile_text($filename);
+	}
+	return @tunnels;
+}
+
+sub p {
+	my $px = shift;
+	print $px . "\n";
+}
+
+sub parseIpFile_yaml {
+	my $filename = shift;
+	my $buffer = readFile($filename);
+	my $config  = Load($buffer);
+	my @tunnels;
+
+	foreach my $t ( @{$config->{'ipsec'}} )
+	{
+
+#		 print Dumper ( $t);
+		my $site1 = $t->{'site1'}->{'name'};
+		my $site2 = $t->{'site2'}->{'name'};
+
+		 my $tunnel = {
+				'psk' => $t->{'SharedSecret'},
+				'sites' => [ $t->{'site1'}->{'name'},  $t->{'site2'}->{'name'} ],
+				'ips' => {
+					'bgpfullmesh' => {
+						$site1 => $t->{'site1'}->{'bgpfullmesh'} || 0,
+						$site2 => $t->{'site2'}->{'bgpfullmesh'} || 0,
+					},
+					'extint' => {
+						$site1 => $t->{'site1'}->{'extint'},
+						$site2 => $t->{'site2'}->{'extint'},
+					},
+					'localas' => {
+						$site1 => $t->{'site1'}->{'localas'},
+						$site2 => $t->{'site2'}->{'localas'},
+					},
+					'outer' => {
+						$site1 => $t->{'site1'}->{'publicIP'},
+						$site2 => $t->{'site2'}->{'publicIP'},
+					},
+					'inner' => {
+						$site1 => $t->{'site1'}->{'privateIP'},
+						$site2 => $t->{'site2'}->{'privateIP'},
+					},
+				},
+			};
+		 push @tunnels, $tunnel;
+
+	}
+		return @tunnels;
+
+}
+
+sub parseIpFile_text {
+	my $filename = shift;
+	my $buffer = readFile($filename);
 
 	my @tunnels;
 	foreach my $l (split ("\n", $buffer) ) {
 
 		chomp($l);
 		if ( $l =~ m/^#/ ) { next; }
-		my ($o,$i,$s,$o2,$i2,$s2,$psk) = split ('[\t\s]+', $l);
+		my ($o,$i,$s,$extint1,$localas1,$o2,$i2,$s2,$extint2,$localas2,$psk) = split ('[\t\s]+', $l);
 	
 		if ( $psk =~ /^\$(GEN|GENERATE|RAN|RANDOM)/ ) {
 			$psk = pskGen(1024,64);
@@ -138,6 +204,18 @@ sub parseIpFile {
 				'psk' => $psk,
 				'sites' => [$s,$s2],
 				'ips' => {
+					'bgpfullmesh' => {
+						$s => 0,
+						$s2 => 0,
+					},
+					'extint' => {
+						$s => $extint1,
+						$s2 => $extint2,
+					},
+					'localas' => {
+						$s => $localas1,
+						$s2 => $localas2,
+					},
 					'outer' => { 
 						$s => $o,
 						$s2 => $o2,
@@ -175,7 +253,10 @@ sub pskGen {
 sub ipsecGen {
     my $tunnel = shift;
     my $flip = shift;
+    my $innerIps = shift;
     my $SHARED_KEY = $tunnel->{'psk'};
+
+	print Dumper ( $tunnel );
 
     my @sites_sorted = sort @{$tunnel->{'sites'}};
     my $site1 = $sites_sorted[0];
@@ -185,16 +266,19 @@ sub ipsecGen {
         $site2 = $sites_sorted[0];
     }
     my $NAME = "${site1}-2-${site2}";
-    my $EXT_INT  = "ge-0/0/0";
+    my $EXT_INT  = $tunnel->{'ips'}->{'extint'}->{$site1};
 
     my $DEST_IP = $tunnel->{'ips'}->{'outer'}->{$site2};
     my $DEST_IP_OUTER = $DEST_IP;
     my $SRC_IP_OUTER = $tunnel->{'ips'}->{'outer'}->{$site1};
     my $ipsrcouter = new NetAddr::IP->new($SRC_IP_OUTER);
     my $SRC_IP = $ipsrcouter->addr();
-        
+
     my $DEST_IP_INNER_CIDR = $tunnel->{'ips'}->{'inner'}->{$site2};
-    my $LOCAL_IP_INNER_CIDR = $tunnel->{'ips'}->{'inner'}->{$site1}; 
+    my $LOCAL_IP_INNER_CIDR = $tunnel->{'ips'}->{'inner'}->{$site1};
+
+    print "DEST_IP_INNER_CIDR: " . $DEST_IP_INNER_CIDR;
+    print "LOCAL_IP_INNER_CIDR: " . $LOCAL_IP_INNER_CIDR;
     my $TUN_ADDR = $LOCAL_IP_INNER_CIDR;
 
     my $ip_outdst = new NetAddr::IP->new($DEST_IP);
@@ -226,7 +310,6 @@ sub ipsecGen {
 
 
 
-        
         $config{'meta'}{'to'} = $site2;
         $config{'meta'}{'from'} = $site1;
 
@@ -315,11 +398,7 @@ protocol bgp ${SITE} {
         push @{$config{'junos'}{'zones'}{'trust'}},  "delete security zones security-zone trust interfaces ${TUN}.${TUN_UNIT} ";
         push @{$config{'junos'}{'zones'}{'trust'}},  "set security zones security-zone trust interfaces ${TUN}.${TUN_UNIT} host-inbound-traffic system-services all";
         push @{$config{'junos'}{'zones'}{'trust'}},  "set security zones security-zone trust interfaces ${TUN}.${TUN_UNIT} host-inbound-traffic protocols all";
-        
-        
         push @{$config{'junos'}{'protocols'}{'bgp'}},  "set protocols bgp group intra-srx neighbor ${DEST_IP_INNER}";
-        
-
 	return %config;
 }
 
@@ -333,17 +412,30 @@ print($usage->text), exit if $opt->help;
 my @tunnels = parseIpFile($opt->{'ipfile'});
 my %configs;
 my %freebsd;
+my %inner_ips;
 foreach my $tunnel ( @tunnels ) {
-#    my $psk = pskGen(1024,64);
+    my @sites_sorted = sort @{$tunnel->{'sites'}};
+    my $site1 = $sites_sorted[0];
+    my $site2 = $sites_sorted[1];
+
+    my $ipdstinner_site1 = new NetAddr::IP->new($tunnel->{'ips'}->{'inner'}->{$site1});
+    my $DEST_IP_INNER_SITE1 = $ipdstinner_site1->addr;
+    my $ipdstinner_site2 = new NetAddr::IP->new($tunnel->{'ips'}->{'inner'}->{$site2});
+    my $DEST_IP_INNER_SITE2 = $ipdstinner_site2->addr;
+
+	push @{$inner_ips{$site1}}, $DEST_IP_INNER_SITE1;
+	push @{$inner_ips{$site2}}, $DEST_IP_INNER_SITE2;
+}
+
+print Dumper ( %inner_ips );
+
+foreach my $tunnel ( @tunnels ) {
     foreach my $flip ( ( 0,1 ) ) {
-        my %tun0 = ipsecGen ( $tunnel, $flip);
+        my %tun0 = ipsecGen ( $tunnel, $flip, \%inner_ips);
         my %tun = %{$tun0{'junos'}};
         my $site = $tun0{'meta'}{'from'};
         my $site_to = $tun0{'meta'}{'to'};
         print " ==> $site to $site_to \n";
-#        if ( !defined ($configs{$site}) ) {
-#            $configs{$site} = "";
-#        }
         foreach my $section ( sort keys %tun ) 
         {
             next if ( $section =~ /meta/ );

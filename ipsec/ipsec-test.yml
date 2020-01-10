@@ -1,0 +1,31 @@
+---
+ipsec:
+    - tunnel: "Tunnel 1"
+      site1: 
+        publicIP:
+        privateIP:
+        name: 
+        extint: 
+        localas: 
+      site2:
+        publicIP: 
+        privateIP: 
+        name: 
+        extint: 
+        localas: 
+      SharedSecret: 
+
+    - tunnel: "Tunnel 2"
+      site1: 
+        publicIP:
+        privateIP:
+        name: 
+        extint: 
+        localas: 
+      site2:
+        publicIP: 
+        privateIP: 
+        name: 
+        extint: 
+        localas: 
+      SharedSecret: 
