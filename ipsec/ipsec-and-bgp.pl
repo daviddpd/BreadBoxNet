@@ -333,7 +333,9 @@ protocol bgp ${SITE} {
 ";
 
 
+        push @{$config{'freebsd'}{'bird'}{'routerid'}}, "router id ${SRC_IP};";
         push @{$config{'freebsd'}{'bird'}{'bgp'}}, $bird_bgp;
+
         push @{$config{'freebsd'}{'rc'}{'ifconfig'}},  "ifconfig_ipsec${TUN_UNIT}=\"inet ${LOCAL_IP_INNER} ${DEST_IP_INNER} netmask ${INNER_TUNNEL_MASK} tunnel ${SRC_IP} ${DEST_IP} reqid ${TUN_UNIT} mtu 1350\"";
         push @{$config{'freebsd'}{'rc'}{'cloned_interfaces'}}, "ipsec${TUN_UNIT}";
         push @{$config{'freebsd'}{'racoon'}{'setkey'}}, "spdadd -4n ${INNER_CIDR} ${INNER_CIDR} any -P out ipsec esp/tunnel/${SRC_IP}-${DEST_IP}/unique:${TUN_UNIT};";
@@ -342,7 +344,7 @@ protocol bgp ${SITE} {
 
         push @{$config{'freebsd'}{'racoon'}{'conf'}}, "remote ${DEST_IP} [500] {";
         push @{$config{'freebsd'}{'racoon'}{'conf'}}, "	passive off;";
-        push @{$config{'freebsd'}{'racoon'}{'conf'}}, "	my_identifier address ${LOCAL_IP_INNER};";
+        push @{$config{'freebsd'}{'racoon'}{'conf'}}, "	my_identifier address ${SRC_IP};";
         push @{$config{'freebsd'}{'racoon'}{'conf'}}, "	exchange_mode main;";
         push @{$config{'freebsd'}{'racoon'}{'conf'}}, "	lifetime time 24 hour;";
         push @{$config{'freebsd'}{'racoon'}{'conf'}}, "	proposal {";
@@ -460,6 +462,8 @@ foreach my $tunnel ( @tunnels ) {
 		        	    	$freebsd{$site}{"$section.$block"} .=  $line . "\n";
 	        	    	} elsif  ( ($block =~ /bgp/) && ($section =~/bird/) ) {
 		        	    	$freebsd{$site}{"$section.$block"} .=  $line . "\n";
+	        	    	} elsif  ( ($block =~ /routerid/) && ($section =~/bird/) ) {
+							$freebsd{$site}{'routerid'} = $line;
 	        	    	} else {
 		        	    	$freebsd{$site}{$block} .=  $line . "\n";	    	
 	        	    	}
@@ -495,6 +499,7 @@ foreach my $site ( sort keys %configs )
 		} elsif ( $block =~ /racoon\.conf/ ) {	
 		    print FH $racoonconf;
 		} elsif ( $block =~ /bird\.bgp/ ) {	
+	        print FH $freebsd{$site}{'routerid'} . "\n";
 			my $bird = readFile("bird.conf");
 		    print FH $bird . "\n";
 		} 
