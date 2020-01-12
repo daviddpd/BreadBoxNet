@@ -98,6 +98,7 @@ ipsec:
 * No proposal chosen (14)
 * IKEv1 Error : No proposal chosen
 * IKEv2 SA select failed with error No proposal chosen
+* Peer's IKE-ID validation failed during negotiation
 
 Typically this is caused by:
 * pre-shared-key are mismatched
@@ -109,3 +110,5 @@ Typically this is caused by:
   * Tip: `start shell` and use `cat > x.set`, then paste, then Cntrl-D to close file.  back to `cli`, `edit` and then `load set x.set`
 	* When possible, compose in a decent text editor and SCP file to the SRX.
 	* Tip: Configure over the serial console, the system, ssh and a management port, even a non-routed network.  Faster and nicer than 9600 bps. 
+* Peer's IKE-ID validation failed during negotiation
+  * The `my_identifier address` in raccon is mismatched to the `remote-identity` on the Juniper side.  Or the remote-identity/local-identity are mismatched between two Junipers. It is unclear if there is a specific string or IP these idenifiers should be, but it appears that they are just that - an identifier, not specified by the protocol. So, whether this is the InnerIP or the OuterIP - may not matter, as long as they are aligned.
