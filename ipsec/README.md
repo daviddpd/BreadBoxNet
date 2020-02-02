@@ -112,3 +112,24 @@ Typically this is caused by:
 	* Tip: Configure over the serial console, the system, ssh and a management port, even a non-routed network.  Faster and nicer than 9600 bps. 
 * Peer's IKE-ID validation failed during negotiation
   * The `my_identifier address` in raccon is mismatched to the `remote-identity` on the Juniper side.  Or the remote-identity/local-identity are mismatched between two Junipers. It is unclear if there is a specific string or IP these idenifiers should be, but it appears that they are just that - an identifier, not specified by the protocol. So, whether this is the InnerIP or the OuterIP - may not matter, as long as they are aligned.
+* `IKEv1 with status No proposal chosen`
+  * After working, then trying to add settings, the IPSEC tunnels dropped. Why ?  Additional IPs were added to  ${EXT_INT}.  Set the IPSEC  ${EXT_INT} to "primary" & "preferred" - resolved the issue.
+
+```
+[Feb  2 02:49:17]ike_st_i_n: Start, doi = 1, protocol = 1, code = No proposal chosen (14), spi[0..16] = 8ea7eb4b 2294a302 ..., data[0..46] = 800c0001 00060022 ...
+[Feb  2 02:49:17]<none>:500 (Responder) <-> 172.16.0.2:500 { 8ea7eb4b 2294a302 - a1346cfd 503b9a55 [0] / 0x747a787d } Info; Notification data has attribute list
+[Feb  2 02:49:17]<none>:500 (Responder) <-> 172.16.0.2:500 { 8ea7eb4b 2294a302 - a1346cfd 503b9a55 [0] / 0x747a787d } Info; Notify message version = 1
+[Feb  2 02:49:17]<none>:500 (Responder) <-> 172.16.0.2:500 { 8ea7eb4b 2294a302 - a1346cfd 503b9a55 [0] / 0x747a787d } Info; Error text = Could not find acceptable proposal
+[Feb  2 02:49:17]<none>:500 (Responder) <-> 172.16.0.2:500 { 8ea7eb4b 2294a302 - a1346cfd 503b9a55 [0] / 0x747a787d } Info; Offending message id = 0x00000000
+[Feb  2 02:49:17]<none>:500 (Responder) <-> 172.16.0.2:500 { 8ea7eb4b 2294a302 - a1346cfd 503b9a55 [0] / 0x747a787d } Info; Received notify err = No proposal chosen (14) to isakmp sa, delete it
+[Feb  2 02:49:17]ike_st_i_private: Start
+[Feb  2 02:49:17]ike_send_notify: Connected, SA = { 8ea7eb4b 2294a302 - a1346cfd 503b9a55}, nego = 0
+[Feb  2 02:49:17]172.16.0.10:500 (Initiator) <-> 172.16.0.2:500 { 8ea7eb4b 2294a302 - a1346cfd 503b9a55 [-1] / 0x00000000 } IP; Connection got error = 14, calling callback
+[Feb  2 02:49:17]ikev2_fb_v1_encr_id_to_v2_id: Unknown IKE encryption identifier -1
+[Feb  2 02:49:17]ikev2_fb_v1_hash_id_to_v2_prf_id: Unknown IKE hash alg identifier -1
+[Feb  2 02:49:17]ikev2_fb_v1_hash_id_to_v2_integ_id: Unknown IKE hash alg identifier -1
+[Feb  2 02:49:17]IKE negotiation fail for local:172.16.0.10, remote:172.16.0.2 IKEv1 with status: No proposal chosen
+[Feb  2 02:49:17]  IKEv1 Error : No proposal chosen
+[Feb  2 02:49:17]IPSec Rekey for SPI 0x0 failed
+[Feb  2 02:49:17]IPSec SA done callback called for sa-cfg ipsec-vpn-den1-2-stl1 local:172.16.0.10, remote:172.16.0.2 IKEv1 with status No proposal chosen
+```
