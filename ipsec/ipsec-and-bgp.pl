@@ -333,6 +333,8 @@ protocol bgp ${SITE} {
 ";
 
 
+
+
         push @{$config{'freebsd'}{'bird'}{'routerid'}}, "router id ${SRC_IP};";
         push @{$config{'freebsd'}{'bird'}{'bgp'}}, $bird_bgp;
 
@@ -367,6 +369,7 @@ protocol bgp ${SITE} {
         push @{$config{'junos'}{'ike'}{'gateway'}},  "delete security ike gateway ike-gate-${NAME}";
         push @{$config{'junos'}{'ike'}{'gateway'}},  "set security ike gateway ike-gate-${NAME} ike-policy ike-policy-${NAME}";
         push @{$config{'junos'}{'ike'}{'gateway'}},  "set security ike gateway ike-gate-${NAME} address ${DEST_IP}";
+        push @{$config{'junos'}{'ike'}{'gateway'}},  "set security ike gateway ike-gate-${NAME} dead-peer-detection always-send";
         push @{$config{'junos'}{'ike'}{'gateway'}},  "set security ike gateway ike-gate-${NAME} dead-peer-detection interval 10";
         push @{$config{'junos'}{'ike'}{'gateway'}},  "set security ike gateway ike-gate-${NAME} dead-peer-detection threshold 5";
         push @{$config{'junos'}{'ike'}{'gateway'}},  "set security ike gateway ike-gate-${NAME} local-identity inet ${SRC_IP}";
