@@ -71,8 +71,21 @@ foreach my $s ( @{$c->{'bgp'}{'servers'}} ) {
 	my $prefix = $_net->masklen();
 	my $BGP_LOCAL = $_net->first()->addr();
 	my $BGP_NEIGHBOR = $_net->last()->addr();
-	my $ASN	 = $s->{'ASN'};
-	my $ASN_NEIGHBOR	 = $s->{'ASN_NEIGHBOR'};
+
+	my $ASN				 = 0;
+	my $ASN_NEIGHBOR	 = 0;
+	if ( defined ($c->{'bgp'}{'asn'}{'base'} ) ) 
+	{
+		$base = $c->{'bgp'}{'asn'}{'base'};
+		my @bl = split ( /\./, $BGP_LOCAL );
+		my @bn = split ( /\./, $BGP_NEIGHBOR );
+		$ASN			 = $base + pop(@bl);
+		$ASN_NEIGHBOR	 = $base + pop(@bn);
+
+	} else {
+		$ASN				 = $s->{'ASN'};
+		$ASN_NEIGHBOR	 = $s->{'ASN_NEIGHBOR'};
+	}
 	
 
 	if ( !defined ( $siteint{$s->{'site'}} ) ) {
@@ -87,11 +100,13 @@ foreach my $s ( @{$c->{'bgp'}{'servers'}} ) {
 	$srx{$s->{'site'}} .= "set protocols bgp group $groupname advertise-peer-as\n";
 	$srx{$s->{'site'}} .= "set protocols bgp group $groupname import import-service\n";
 	$srx{$s->{'site'}} .= "set protocols bgp group $groupname export send-service\n";
-	$srx{$s->{'site'}} .= "set protocols bgp group $groupname peer-as $s->{'ASN'}\n";
+	$srx{$s->{'site'}} .= "set protocols bgp group $groupname peer-as $ASN\n";
+	$srx{$s->{'site'}} .= "set protocols bgp group $groupname as-override\n";
+	$srx{$s->{'site'}} .= "set protocols bgp group $groupname local-as ${ASN_NEIGHBOR} loops 4\n";	
 	$srx{$s->{'site'}} .= "set protocols bgp group $groupname bfd-liveness-detection minimum-interval 200\n";
 	$srx{$s->{'site'}} .= "set protocols bgp group $groupname bfd-liveness-detection multiplier 6\n";
 	$srx{$s->{'site'}} .= "set protocols bgp group $groupname multipath\n";
-	$srx{$s->{'site'}} .= "set protocols bgp group $groupname neighbor $s->{'BGP_LOCAL'}\n";
+	$srx{$s->{'site'}} .= "set protocols bgp group $groupname neighbor ${BGP_LOCAL}\n";
 
 
 my $SRVNET1	 = "";
