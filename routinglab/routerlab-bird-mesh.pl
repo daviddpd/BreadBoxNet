@@ -38,20 +38,6 @@ sub parseIpFile_yaml {
 
 my $c = parseIpFile_yaml($opt->ipfile);
 
-my $fields_text="ip;site;vlan;net;BGP_NEIGHBOR;BGP_LOCAL;ASN_NEIGHBOR;ASNPLUS;ASNINC;ASN;SRVNET1;SRVMED1;SRVIP1;SRVNET2;SRVMED2;SRVIP2;SRVNET3;SRVMED3;SRVIP3";
-my $data_text="
-10.20.0.2;stl;1021;172.31.10.0/30;172.31.10.1;172.31.10.2;65000;64000;10;64010;10.69.1.0/24;1;10.69.1.1;10.69.2.0/24;3;10.69.2.1;10.69.3.0/24;2;10.69.3.1
-10.20.0.3;stl;1021;172.31.10.4/30;172.31.10.5;172.31.10.6;65000;64000;20;64020;10.69.1.0/24;2;10.69.1.1;10.69.2.0/24;1;10.69.2.1;10.69.3.0/24;3;10.69.3.1
-10.20.0.4;stl;1021;172.31.10.8/30;172.31.10.9;172.31.10.10;65000;64000;30;64030;10.69.1.0/24;3;10.69.1.1;10.69.2.0/24;2;10.69.2.1;10.69.3.0/24;1;10.69.3.1
-
-10.30.0.2;ord;1031;172.31.10.12/30;172.31.10.13;172.31.10.14;65004;64004;40;64044;10.69.1.0/24;1;10.69.1.1;10.69.2.0/24;3;10.69.2.1;10.69.3.0/24;2;10.69.3.1
-10.30.0.3;ord;1031;172.31.10.16/30;172.31.10.17;172.31.10.18;65004;64004;50;64054;10.69.1.0/24;2;10.69.1.1;10.69.2.0/24;1;10.69.2.1;10.69.3.0/24;3;10.69.3.1
-10.30.0.4;ord;1031;172.31.10.20/30;172.31.10.21;172.31.10.22;65004;64004;60;64064;10.69.1.0/24;3;10.69.1.1;10.69.2.0/24;2;10.69.2.1;10.69.3.0/24;1;10.69.3.1
-
-10.40.0.2;den;1041;172.31.10.24/30;172.31.10.25;172.31.10.26;65008;64008;70;64078;10.69.1.0/24;1;10.69.1.1;10.69.2.0/24;3;10.69.2.1;10.69.3.0/24;2;10.69.3.1
-10.40.0.3;den;1041;172.31.10.28/30;172.31.10.29;172.31.10.30;65008;64008;80;64088;10.69.1.0/24;2;10.69.1.1;10.69.2.0/24;1;10.69.2.1;10.69.3.0/24;3;10.69.3.1
-10.40.0.4;den;1041;172.31.10.32/30;172.31.10.33;172.31.10.34;65008;64008;90;64098;10.69.1.0/24;3;10.69.1.1;10.69.2.0/24;2;10.69.2.1;10.69.3.0/24;1;10.69.3.1";
-
 my @fields;
 my %h;
 my %srx;
@@ -59,12 +45,16 @@ $srx{'stl1'} = "\n";
 $srx{'ord1'} = "\n";
 $srx{'den1'} = "\n";
 
+my @vipnets;
+
+foreach my $v ( @{$c->{'bgp'}{'vips'}} ) {
+	push @vipnets, new NetAddr::IP->new( $v->{'net'});
+}
+
+
 my %siteint;
 foreach my $s ( @{$c->{'bgp'}{'servers'}} ) {
 	
-	my $groupname = "site-srv-" . $s->{'ASN'};
-	$groupname =~ s/\30//g;
-	$groupname =~ s/\./-/g;
 #	my $s = $s->{'site'};
 	my $vlan = $s->{'vlan'};
     my $_net = new NetAddr::IP->new( $s->{'net'} );
@@ -76,7 +66,7 @@ foreach my $s ( @{$c->{'bgp'}{'servers'}} ) {
 	my $ASN_NEIGHBOR	 = 0;
 	if ( defined ($c->{'bgp'}{'asn'}{'base'} ) ) 
 	{
-		$base = $c->{'bgp'}{'asn'}{'base'};
+		my $base = $c->{'bgp'}{'asn'}{'base'};
 		my @bl = split ( /\./, $BGP_LOCAL );
 		my @bn = split ( /\./, $BGP_NEIGHBOR );
 		$ASN			 = $base + pop(@bl);
@@ -87,6 +77,7 @@ foreach my $s ( @{$c->{'bgp'}{'servers'}} ) {
 		$ASN_NEIGHBOR	 = $s->{'ASN_NEIGHBOR'};
 	}
 	
+	my $groupname = "srv-" . $s->{'site'} . "-" . $s->{'name'};
 
 	if ( !defined ( $siteint{$s->{'site'}} ) ) {
 		$srx{$s->{'site'}} .=	"delete interfaces ge-0/0/2 unit $vlan\n";
@@ -118,6 +109,7 @@ my $SRVIP2	 = "";
 my $SRVNET3	 = "";
 my $SRVMED3	 = 0;
 my $SRVIP3	 = "";
+my $SRVNET;
 
 open FH, ">rc.conf.local-" . $s->{'name'} . "-" . $s->{'site'};
 print FH "ifconfig_vtnet1=\"inet ${BGP_LOCAL}/$prefix up\"\n";
@@ -126,18 +118,28 @@ print FH "ifconfig_vtnet1=\"inet ${BGP_LOCAL}/$prefix up\"\n";
 		
 		my $med = $srvip->{'med'};
 		my $sx = new NetAddr::IP->new($srvip->{'vip'});
+		foreach my $vn ( @vipnets ) 
+		{
+			my $b = $vn->contains($sx);
+			if ( $b ) {
+				$SRVNET = $vn->network;
+			}
+			
+			#printf ( " %d %s %s \n", $b, $vn, $sx );
+		}
+		
 		if ( $med == 1 ) {
-			$SRVNET1	 = $sx->network;
+			$SRVNET1	 = $SRVNET;
 			$SRVMED1	 = 1;
 			$SRVIP1	 = $sx->addr;
 		}
 		if ( $med == 2 ) {
-			$SRVNET2	 = $sx->network;
+			$SRVNET2	 = $SRVNET;
 			$SRVMED2	 = 2;
 			$SRVIP2	 = $sx->addr;
 		}
 		if ( $med == 3 ) {
-			$SRVNET3	 = $sx->network;
+			$SRVNET3	 = $SRVNET;
 			$SRVMED3	 = 3;
 			$SRVIP3	 = $sx->addr;
 		}
@@ -223,7 +225,7 @@ ${bgpPath3}
 }
 
 
-protocol bgp service1 {
+protocol bgp srv1 {
 	local as ${ASN};
 	neighbor ${BGP_NEIGHBOR} as ${ASN_NEIGHBOR};
 	direct;
