@@ -77,14 +77,19 @@ foreach my $s ( @{$c->{'bgp'}{'servers'}} ) {
 		$ASN_NEIGHBOR	 = $s->{'ASN_NEIGHBOR'};
 	}
 	
+	my $BGP_INTERFACE = "ge-0/0/0";
+	if ( defined ($c->{'bgp'}{'srx'}{'interface'} ) ) {
+		$BGP_INTERFACE = $c->{'bgp'}{'srx'}{'interface'};
+	} 
+	
 	my $groupname = "srv-" . $s->{'site'} . "-" . $s->{'name'};
 
 	if ( !defined ( $siteint{$s->{'site'}} ) ) {
-		$srx{$s->{'site'}} .=	"delete interfaces ge-0/0/2 unit $vlan\n";
+		$srx{$s->{'site'}} .=	"delete interfaces ${BGP_INTERFACE} unit $vlan\n";
 		$siteint{$s->{'site'}} = 1;
 	}
-	$srx{$s->{'site'}} .=	"set interfaces ge-0/0/2 unit $vlan family inet address ${BGP_NEIGHBOR}/$prefix\n";
-	$srx{$s->{'site'}} .=	"set interfaces ge-0/0/2 unit $vlan vlan-id $vlan\n";
+	$srx{$s->{'site'}} .=	"set interfaces ${BGP_INTERFACE} unit $vlan family inet address ${BGP_NEIGHBOR}/$prefix\n";
+	$srx{$s->{'site'}} .=	"set interfaces ${BGP_INTERFACE} unit $vlan vlan-id $vlan\n";
 	$srx{$s->{'site'}} .= "delete protocols bgp group $groupname\n";
 	$srx{$s->{'site'}} .= "set protocols bgp group $groupname type external\n";
 	$srx{$s->{'site'}} .= "set protocols bgp group $groupname hold-time 20\n";
